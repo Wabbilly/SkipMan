@@ -26,8 +26,6 @@ BORDER_DARK  = "#0a0a0a"      # Raised edge dark side
 BORDER_MID   = "#444444"      # Divider lines
 
 # ── Fonts ───────────────────────────────────────────────────────────────────
-# "Terminal" is the classic Windows bitmap font — pixel-perfect 90s feel
-# Falls back to "Courier New" if Terminal isn't available
 FONT_HEADER    = ("Terminal", 18, "bold")
 FONT_TITLE     = ("Terminal", 14, "bold")
 FONT_MAIN      = ("Courier New", 10)
@@ -67,4 +65,13 @@ def label_style(muted=False):
     return dict(
         font=FONT_SMALL, bg=BG_DARK,
         fg=MUTED if muted else TEXT_LIGHT,
+    )
+
+def listbox_style():
+    """Common kwargs for Listbox widgets."""
+    return dict(
+        font=FONT_SMALL, bg=BG_INPUT, fg=TEXT_LIGHT,
+        selectbackground=GREEN, selectforeground=TEXT_DARK,
+        relief="sunken", bd=2, activestyle="none",
+        highlightthickness=0,
     )

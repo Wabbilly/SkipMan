@@ -1,4 +1,4 @@
-# ── yt-dlp Download Wrapper ─────────────────────────────────────────────────
+# ── yt-dlp Wrapper — probe + download ───────────────────────────────────────
 
 import os
 import re
@@ -12,22 +12,81 @@ def detect_apple_music(url):
     return bool(APPLE_MUSIC_PATTERN.search(url))
 
 
+def _base_opts():
+    return {
+        "quiet": True,
+        "no_warnings": True,
+        "noprogress": True,
+        "noplaylist": False,
+    }
+
+
+def probe(url):
+    """
+    Fetch info WITHOUT downloading. Fast (flat) for playlists.
+
+    Returns dict:
+      {"kind": "single", "entry": {title, artist, url, id}}
+      {"kind": "playlist", "title": str, "uploader": str,
+       "entries": [{title, artist, url, id}, ...]}
+
+    Raises ValueError for Apple Music links, Exception on failure.
+    """
+    if detect_apple_music(url):
+        raise ValueError(
+            "Apple Music links are DRM-protected and cannot be downloaded.\n"
+            "Paste a YouTube or SoundCloud link instead."
+        )
+
+    import yt_dlp
+
+    opts = _base_opts()
+    opts["extract_flat"] = "in_playlist"
+
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+
+    def _entry(e, fallback_url=None):
+        url = e.get("url") or e.get("webpage_url") or fallback_url or ""
+        title = e.get("title")
+        guess = False
+        if not title or title == "Unknown":
+            # Flat playlist entries (e.g. SoundCloud) may omit the title —
+            # derive a readable one from the URL slug; the real title is
+            # picked up when the track actually downloads.
+            slug = url.rstrip("/").rsplit("/", 1)[-1].split("?")[0]
+            title = slug.replace("-", " ").replace("_", " ").strip().title() \
+                or "Unknown"
+            guess = True
+        return {
+            "title": title,
+            "artist": e.get("artist") or e.get("creator")
+                      or e.get("uploader") or "",
+            "url": url,
+            "id": e.get("id") or "",
+            "guess": guess,
+        }
+
+    if info.get("_type") == "playlist" or "entries" in info:
+        entries = [
+            _entry(e) for e in (info.get("entries") or []) if e
+        ]
+        return {
+            "kind": "playlist",
+            "title": info.get("title") or "Playlist",
+            "uploader": info.get("uploader") or info.get("channel") or "",
+            "entries": entries,
+        }
+
+    return {"kind": "single", "entry": _entry(info, fallback_url=url)}
+
+
 def download_song(url, save_dir, progress_callback=None, ffmpeg_location=None):
     """
-    Download audio from URL and convert to MP3.
+    Download audio from URL and convert to 320kbps MP3.
 
-    Args:
-        url: YouTube / SoundCloud / etc. URL
-        save_dir: Directory to save the MP3
-        progress_callback: yt-dlp progress hook function
-        ffmpeg_location: Path to directory containing ffmpeg.exe (or None for PATH)
-
-    Returns:
-        dict with keys: title, artist, album, thumbnail_url, file_path
-
-    Raises:
-        ValueError: If the URL is from Apple Music (DRM-protected)
-        Exception: On download failure
+    Returns dict: {title, artist, album, thumbnail_url, file_path}
+    Raises ValueError for Apple Music links, Exception on failure.
     """
     if detect_apple_music(url):
         raise ValueError(
@@ -39,19 +98,21 @@ def download_song(url, save_dir, progress_callback=None, ffmpeg_location=None):
 
     os.makedirs(save_dir, exist_ok=True)
 
-    outtmpl = os.path.join(save_dir, "%(title)s.%(ext)s")
+    # Include the video id so two songs with the same title never clobber
+    # each other; the id is stripped again on the edit screen save.
+    outtmpl = os.path.join(save_dir, "%(title)s [%(id)s].%(ext)s")
 
-    opts = {
+    opts = _base_opts()
+    opts.update({
         "format": "bestaudio/best",
         "outtmpl": outtmpl,
+        "noplaylist": True,
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
             "preferredquality": "320",
         }],
-        "quiet": True,
-        "no_warnings": True,
-    }
+    })
 
     if ffmpeg_location:
         opts["ffmpeg_location"] = ffmpeg_location
@@ -61,8 +122,6 @@ def download_song(url, save_dir, progress_callback=None, ffmpeg_location=None):
 
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=True)
-
-        # Get the actual output filename (sanitized by yt-dlp)
         prepared = ydl.prepare_filename(info)
         mp3_path = os.path.splitext(prepared)[0] + ".mp3"
 

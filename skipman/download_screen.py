@@ -1,4 +1,4 @@
-# ── Download Screen — Queue + Download UI ───────────────────────────────────
+# ── Download Screen — Queue + Background Download UI ────────────────────────
 
 import tkinter as tk
 from tkinter import filedialog
@@ -8,11 +8,12 @@ from skipman import theme
 
 
 class DownloadScreen(tk.Frame):
-    """Screen 1: paste URLs, manage queue, download MP3s."""
+    """Screen 1: paste URLs; the queue downloads itself in the background."""
 
     def __init__(self, parent, app):
         super().__init__(parent, bg=theme.BG_DARK)
         self.app = app
+        self._active_pct = 0
         self._build_ui()
 
     # ── Build UI ────────────────────────────────────────────────────────────
@@ -21,13 +22,14 @@ class DownloadScreen(tk.Frame):
         hdr = tk.Frame(self, bg=theme.BG_DARK)
         hdr.pack(fill="x", padx=20, pady=(16, 0))
 
+        from skipman import __version__
         tk.Label(
-            hdr, text="// SKIPMAN v1.0", font=theme.FONT_HEADER,
+            hdr, text=f"// SKIPMAN v{__version__}", font=theme.FONT_HEADER,
             bg=theme.BG_DARK, fg=theme.GREEN,
         ).pack(anchor="w")
 
         tk.Label(
-            hdr, text="YouTube  \u00b7  SoundCloud  \u00b7  and more",
+            hdr, text="YouTube  ·  SoundCloud (songs + playlists)  ·  and more",
             font=theme.FONT_SMALL, bg=theme.BG_DARK, fg=theme.MUTED,
         ).pack(anchor="w")
 
@@ -36,7 +38,8 @@ class DownloadScreen(tk.Frame):
 
         # ── URL Input Row ───────────────────────────────────────────────────
         tk.Label(
-            self, text="PASTE URL", **theme.label_style(muted=True),
+            self, text="PASTE URL  (song or playlist)",
+            **theme.label_style(muted=True),
         ).pack(padx=20, anchor="w")
 
         url_row = tk.Frame(self, bg=theme.BG_DARK)
@@ -44,11 +47,11 @@ class DownloadScreen(tk.Frame):
 
         self.url_entry = tk.Entry(url_row, **theme.entry_style())
         self.url_entry.pack(side="left", fill="x", expand=True, ipady=5)
-        self.url_entry.bind("<Return>", lambda e: self._add_to_queue())
+        self.url_entry.bind("<Return>", lambda e: self._add_url())
 
         self.add_btn = tk.Button(
             url_row, text="ADD", padx=14, pady=3,
-            **theme.button_style(), command=self._add_to_queue,
+            **theme.button_style(), command=self._add_url,
         )
         self.add_btn.pack(side="right", padx=(8, 0))
 
@@ -82,11 +85,7 @@ class DownloadScreen(tk.Frame):
         queue_frame.pack(fill="x", padx=20, pady=(2, 4))
 
         self.queue_listbox = tk.Listbox(
-            queue_frame, font=theme.FONT_SMALL,
-            bg=theme.BG_INPUT, fg=theme.TEXT_LIGHT,
-            selectbackground=theme.GREEN, selectforeground=theme.TEXT_DARK,
-            relief="sunken", bd=2, height=5, activestyle="none",
-        )
+            queue_frame, height=5, **theme.listbox_style())
         self.queue_listbox.pack(fill="x")
 
         # Queue buttons
@@ -103,11 +102,12 @@ class DownloadScreen(tk.Frame):
             **theme.button_style(), command=self._clear_queue,
         ).pack(side="left", padx=(8, 0))
 
-        self.dl_btn = tk.Button(
-            qbtn_row, text="\u25b6  DOWNLOAD", padx=16, pady=4,
-            **theme.button_style(accent=True), command=self._start_download,
+        self.edit_btn = tk.Button(
+            qbtn_row, text="▶  EDIT READY (0)", padx=16, pady=4,
+            **theme.button_style(accent=True), command=self._edit_ready,
+            state="disabled",
         )
-        self.dl_btn.pack(side="right")
+        self.edit_btn.pack(side="right")
 
         # ── Progress Bar (segmented, chunky 90s style) ─────────────────────
         self.progress_canvas = tk.Canvas(
@@ -139,126 +139,193 @@ class DownloadScreen(tk.Frame):
         status_bar = tk.Frame(self, bg=theme.BG_PANEL, relief="sunken", bd=1)
         status_bar.pack(fill="x", side="bottom")
         tk.Label(
-            status_bar, text=" SkipMan v1.0", font=theme.FONT_STATUS,
+            status_bar, text=f" SkipMan v{__version__}",
+            font=theme.FONT_STATUS,
             bg=theme.BG_PANEL, fg=theme.MUTED, anchor="w",
         ).pack(side="left", padx=4, pady=2)
 
-    # ── Queue Actions ───────────────────────────────────────────────────────
-    def _add_to_queue(self):
+        self.bar_right = tk.Label(
+            status_bar, text="", font=theme.FONT_STATUS,
+            bg=theme.BG_PANEL, fg=theme.MUTED, anchor="e",
+        )
+        self.bar_right.pack(side="right", padx=4, pady=2)
+
+    # ── Adding URLs ─────────────────────────────────────────────────────────
+    def _add_url(self):
         url = self.url_entry.get().strip()
         if not url:
             return
-        self.app.queue.append(url)
-        self._refresh_queue_display()
         self.url_entry.delete(0, "end")
-        self._set_status(f"Added to queue. ({len(self.app.queue)} total)", theme.GREEN)
+        self.add_btn.config(state="disabled")
+        self._set_status("Checking link…", theme.AMBER)
 
+        def _probe():
+            from skipman.downloader import probe
+            try:
+                info = probe(url)
+                self.app.post(self._probe_done, url, info, None)
+            except Exception as e:
+                self.app.post(self._probe_done, url, None, str(e))
+
+        threading.Thread(target=_probe, daemon=True).start()
+
+    def _probe_done(self, url, info, error):
+        self.add_btn.config(state="normal")
+        if error:
+            self._set_status(f"Error: {error}", theme.ERROR)
+            self._log(f"[ERROR] {error}")
+            return
+
+        if info["kind"] == "playlist":
+            n = len(info["entries"])
+            self._set_status(
+                f'Playlist "{info["title"]}" — {n} tracks. '
+                "Arrange the album…", theme.GREEN)
+            self.app.show_album_screen(info)
+            return
+
+        entry = info["entry"]
+        # ── Duplicate check before queueing ────────────────────────────────
+        match = self.app.library.check(entry["title"], entry["artist"])
+        if match:
+            from skipman import widgets
+            choice, _ = widgets.ask(
+                self.app, "Already in library?",
+                f'This looks like a song you already have:\n\n'
+                f'  {match["label"]}\n'
+                f'  (found in: {match["source"]})\n\n'
+                f'Download "{entry["title"]}" anyway?',
+                buttons=[("skip", "SKIP IT"), ("dl", "DOWNLOAD ANYWAY")],
+                accent="skip",
+            )
+            if choice != "dl":
+                self._set_status(
+                    f'Skipped duplicate: "{entry["title"]}"', theme.MUTED)
+                self._log(f'[DUPE] Skipped "{entry["title"]}" '
+                          f'({match["source"]})')
+                return
+
+        from skipman.worker import Job
+        job = Job(url=entry["url"] or url, title=entry["title"],
+                  artist=entry["artist"])
+        self.app.worker.add(job)
+        self._set_status(
+            f'Queued: "{entry["title"]}" — downloading in background.',
+            theme.GREEN)
+        self.refresh_queue_display()
+
+    # ── Queue actions ───────────────────────────────────────────────────────
     def _remove_selected(self):
         sel = self.queue_listbox.curselection()
         if not sel:
             return
+        _active, pending = self.app.worker.snapshot()
         idx = sel[0]
-        self.app.queue.pop(idx)
-        self._refresh_queue_display()
+        # Row 0 is the active download when present (can't remove that one)
+        offset = 1 if _active else 0
+        p_idx = idx - offset
+        if 0 <= p_idx < len(pending):
+            self.app.worker.cancel(pending[p_idx].id)
+        self.refresh_queue_display()
 
     def _clear_queue(self):
-        self.app.queue.clear()
-        self._refresh_queue_display()
-        self._set_status("Queue cleared.", theme.MUTED)
+        self.app.worker.cancel_all()
+        self.refresh_queue_display()
+        self._set_status("Queue cleared (current download finishes).",
+                         theme.MUTED)
 
-    def _refresh_queue_display(self):
+    def refresh_queue_display(self):
+        active, pending = self.app.worker.snapshot()
         self.queue_listbox.delete(0, "end")
-        for i, url in enumerate(self.app.queue):
-            # Truncate long URLs for display
-            display = url if len(url) < 65 else url[:62] + "..."
-            self.queue_listbox.insert("end", f"  {i + 1}. {display}")
-        self.queue_label.config(text=f"QUEUE ({len(self.app.queue)})")
+
+        row = 0
+        if active:
+            self.queue_listbox.insert(
+                "end", f"  ▼ {self._short(active.title)}"
+                       f"  [{self._active_pct:.0f}%]")
+            self.queue_listbox.itemconfig(row, fg=theme.AMBER)
+            row += 1
+        for i, job in enumerate(pending):
+            self.queue_listbox.insert(
+                "end", f"  {i + 1}. {self._short(job.title)}")
+            row += 1
+
+        total = len(pending) + (1 if active else 0)
+        self.queue_label.config(text=f"QUEUE ({total})")
+
+        # Ready-to-edit button + status bar
+        n_ready = len(self.app.ready)
+        self.edit_btn.config(
+            text=f"▶  EDIT READY ({n_ready})",
+            state="normal" if n_ready else "disabled",
+        )
+        bits = []
+        if total:
+            bits.append(f"{total} downloading")
+        if n_ready:
+            bits.append(f"{n_ready} ready to edit")
+        self.bar_right.config(text="  ".join(bits))
+
+    @staticmethod
+    def _short(text, n=58):
+        text = text or ""
+        return text if len(text) <= n else text[: n - 3] + "..."
 
     def _browse(self):
         d = filedialog.askdirectory(initialdir=self.app.save_dir)
         if d:
-            self.app.save_dir = d
+            self.app.set_save_dir(d)
             self.folder_var.set(d)
 
-    # ── Download ────────────────────────────────────────────────────────────
-    def _start_download(self):
-        if not self.app.queue:
-            self._set_status("Add URLs to the queue first.", theme.ERROR)
-            return
-        self.process_next()
+    def _edit_ready(self):
+        self.app._maybe_edit_next(force=True)
 
-    def process_next(self):
-        """Pop the first URL from the queue and download it."""
-        if not self.app.queue:
-            self._set_status("Queue empty. All done!", theme.GREEN)
-            self.dl_btn.config(state="normal", text="\u25b6  DOWNLOAD")
-            return
+    def can_autojump(self):
+        """OK to auto-open the edit screen? Not while the user is typing."""
+        return not self.url_entry.get().strip()
 
-        url = self.app.queue.pop(0)
-        self._refresh_queue_display()
-        self.dl_btn.config(state="disabled", text="Downloading\u2026")
-        self._set_status("Starting download\u2026", theme.MUTED)
-        self._set_progress(0)
+    # ── Worker event handlers (UI thread) ───────────────────────────────────
+    def on_job_started(self, job):
+        self._active_pct = 0
+        self._set_status(f'Downloading: "{self._short(job.title)}"',
+                         theme.MUTED)
+        self.refresh_queue_display()
 
-        threading.Thread(target=self._download, args=(url,), daemon=True).start()
-
-    def _download(self, url):
-        from skipman.downloader import download_song
-        from skipman.ffmpeg_setup import ensure_ffmpeg
-
-        try:
-            ffmpeg_loc = ensure_ffmpeg(
-                lambda msg: self.after(0, self._set_status, msg, theme.AMBER))
-        except RuntimeError as e:
-            self.after(0, self._download_done, None, str(e))
-            return
-
-        def progress_hook(d):
-            if d["status"] == "downloading":
-                pct_str = d.get("_percent_str", "0%").strip().replace("%", "")
-                try:
-                    pct = float(pct_str)
-                    speed = d.get("_speed_str", "")
-                    self.after(0, self._set_progress, pct)
-                    self.after(0, self._set_status,
-                               f"Downloading\u2026 {pct_str}%  {speed}", theme.MUTED)
-                except ValueError:
-                    pass
-            elif d["status"] == "finished":
-                self.after(0, self._set_progress, 100)
-                self.after(0, self._set_status,
-                           "Converting to MP3\u2026", theme.AMBER)
-
-        try:
-            result = download_song(
-                url, self.app.save_dir,
-                progress_callback=progress_hook,
-                ffmpeg_location=ffmpeg_loc,
-            )
-            self.after(0, self._download_done, result, None)
-        except Exception as e:
-            self.after(0, self._download_done, None, str(e))
-
-    def _download_done(self, result, error):
-        self.dl_btn.config(state="normal", text="\u25b6  DOWNLOAD")
-        if error:
-            self._set_status(f"Error: {error}", theme.ERROR)
-            self._log(f"[ERROR] {error}")
-            self._set_progress(0)
-            # If there are more items in queue, don't stop
-            if self.app.queue:
-                self._set_status(
-                    f"Error: {error}  \u2014  Skipping to next in queue...",
-                    theme.ERROR,
-                )
-                self.after(1500, self.process_next)
+    def on_job_progress(self, job, pct, speed):
+        self._active_pct = pct
+        self._set_progress(pct)
+        if speed == "converting":
+            self._set_status("Converting to MP3…", theme.AMBER)
         else:
-            title = result.get("title", "Unknown")
-            self._set_status(f'Downloaded: "{title}"', theme.SUCCESS)
-            self._log(f'[OK] "{title}.mp3"')
-            self._set_progress(100)
-            # Transition to edit screen
-            self.after(500, self.app.show_edit_screen, result)
+            self._set_status(
+                f"Downloading… {pct:.0f}%  {speed}", theme.MUTED)
+        # Update the active row's percentage without full rebuild
+        active, _ = self.app.worker.snapshot()
+        if active and self.queue_listbox.size():
+            self.queue_listbox.delete(0)
+            self.queue_listbox.insert(
+                0, f"  ▼ {self._short(active.title)}  [{pct:.0f}%]")
+            self.queue_listbox.itemconfig(0, fg=theme.AMBER)
+
+    def on_job_done(self, job, result):
+        title = result.get("title", "Unknown")
+        self._set_progress(100)
+        self._log(f'[OK] "{title}"')
+        self.refresh_queue_display()
+
+    def on_job_error(self, job, message):
+        self._set_status(f"Error: {message}", theme.ERROR)
+        self._log(f"[ERROR] {self._short(job.title)}: {message}")
+        self._set_progress(0)
+        self.refresh_queue_display()
+
+    def on_queue_idle(self):
+        n_ready = len(self.app.ready)
+        if n_ready:
+            self._set_status(
+                f"Downloads finished — {n_ready} song(s) ready to edit.",
+                theme.GREEN)
+        self.refresh_queue_display()
 
     # ── Helpers ─────────────────────────────────────────────────────────────
     def _set_status(self, msg, color=None):

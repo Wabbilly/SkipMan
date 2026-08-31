@@ -2,4 +2,3 @@ yt-dlp
 mutagen
 Pillow
 requests
-imageio-ffmpeg

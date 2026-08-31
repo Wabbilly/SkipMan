@@ -1,30 +1,30 @@
-# ── Edit Screen — Metadata, Artwork, iTunes Upload ──────────────────────────
+# ── Edit Screen — Metadata, Artwork, Autofill, Apple Music Upload ───────────
 
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog
 import threading
 import os
 import io
 
 from skipman import theme
+from skipman.widgets import AutofillEntry
 
 
 class EditScreen(tk.Frame):
-    """Screen 2: edit song metadata, manage artwork, upload to Apple Music."""
+    """Screen 2: edit song metadata (with autofill), artwork, upload."""
 
     def __init__(self, parent, app):
         super().__init__(parent, bg=theme.BG_DARK)
         self.app = app
         self.song_info = None
-        self.artwork_path = None      # Path to artwork file (custom or downloaded thumb)
+        self.artwork_path = None
         self.has_artwork = False
         self.artwork_tk = None        # Keep reference to prevent GC
-        self._thumb_temp = None       # Temp file for downloaded thumbnail
+        self._thumb_temp = None
         self._build_ui()
 
     # ── Build UI ────────────────────────────────────────────────────────────
     def _build_ui(self):
-        # Header
         tk.Label(
             self, text="// EDIT SONG", font=theme.FONT_HEADER,
             bg=theme.BG_DARK, fg=theme.GREEN,
@@ -51,7 +51,7 @@ class EditScreen(tk.Frame):
             bg=theme.BG_INPUT, relief="sunken", bd=2, highlightthickness=0,
         )
         self.art_canvas.pack(pady=(4, 8))
-        self.art_placeholder = self.art_canvas.create_text(
+        self.art_canvas.create_text(
             100, 100, text="NO ART", font=theme.FONT_MAIN, fill=theme.MUTED,
         )
 
@@ -65,23 +65,30 @@ class EditScreen(tk.Frame):
             **theme.button_style(), command=self._clear_artwork,
         ).pack(fill="x")
 
-        # RIGHT: Metadata fields
+        # RIGHT: Metadata fields (with autofill dropdowns)
         right = tk.Frame(content, bg=theme.BG_DARK)
         right.pack(side="left", fill="both", expand=True)
 
-        # Title
         tk.Label(right, text="TITLE", **theme.label_style(muted=True)).pack(anchor="w")
         self.title_entry = tk.Entry(right, **theme.entry_style())
         self.title_entry.pack(fill="x", ipady=5, pady=(2, 10))
 
-        # Artist
-        tk.Label(right, text="ARTIST", **theme.label_style(muted=True)).pack(anchor="w")
-        self.artist_entry = tk.Entry(right, **theme.entry_style())
+        tk.Label(right, text="ARTIST  (autofills from your history)",
+                 **theme.label_style(muted=True)).pack(anchor="w")
+        self.artist_entry = AutofillEntry(
+            right,
+            suggest_fn=lambda t: self.app.store.artist_suggestions(t),
+        )
         self.artist_entry.pack(fill="x", ipady=5, pady=(2, 10))
 
-        # Album
-        tk.Label(right, text="ALBUM", **theme.label_style(muted=True)).pack(anchor="w")
-        self.album_entry = tk.Entry(right, **theme.entry_style())
+        tk.Label(right, text="ALBUM  (autofills from your history)",
+                 **theme.label_style(muted=True)).pack(anchor="w")
+        self.album_entry = AutofillEntry(
+            right,
+            suggest_fn=lambda t: self.app.store.album_suggestions(
+                t, artist=self.artist_entry.get()),
+            on_pick=self._album_picked,
+        )
         self.album_entry.pack(fill="x", ipady=5, pady=(2, 10))
 
         # File path display
@@ -107,7 +114,7 @@ class EditScreen(tk.Frame):
         self.save_btn.pack(side="left", padx=(0, 6))
 
         self.upload_btn = tk.Button(
-            btn_frame, text="\u266b  UPLOAD TO APPLE MUSIC", padx=14, pady=5,
+            btn_frame, text="♫  UPLOAD TO APPLE MUSIC", padx=14, pady=5,
             **theme.button_style(accent=True), command=self._upload_to_itunes,
         )
         self.upload_btn.pack(side="left", padx=(0, 6))
@@ -156,24 +163,22 @@ class EditScreen(tk.Frame):
         self.has_artwork = False
         self._thumb_temp = None
 
-        # Fill text fields
+        title = song_info.get("title", "")
+        artist = song_info.get("artist", "")
+
+        # Autofill: if we've saved this exact title before, reuse its artist
+        if not artist:
+            artist = self.app.store.artist_for(title)
+
         self.title_entry.delete(0, "end")
-        self.title_entry.insert(0, song_info.get("title", ""))
-
-        self.artist_entry.delete(0, "end")
-        self.artist_entry.insert(0, song_info.get("artist", ""))
-
-        self.album_entry.delete(0, "end")
-        self.album_entry.insert(0, song_info.get("album", ""))
+        self.title_entry.insert(0, title)
+        self.artist_entry.set_text(artist)
+        self.album_entry.set_text(song_info.get("album", ""))
 
         fp = song_info.get("file_path", "")
         self.file_var.set(f"File: {fp}")
 
-        # Queue counter
-        remaining = len(self.app.queue)
-        self.queue_remaining.config(
-            text=f"{remaining} more in queue" if remaining else "Last song",
-        )
+        self.refresh_pipeline_status()
 
         # Load thumbnail
         thumb_url = song_info.get("thumbnail_url", "")
@@ -185,6 +190,26 @@ class EditScreen(tk.Frame):
         self._set_status(
             "Edit metadata, then SAVE or UPLOAD TO APPLE MUSIC.", theme.MUTED,
         )
+
+    def refresh_pipeline_status(self):
+        """Show what the background worker is up to while you edit."""
+        n_ready = len(self.app.ready)
+        active, pending = self.app.worker.snapshot()
+        downloading = len(pending) + (1 if active else 0)
+        bits = []
+        if n_ready:
+            bits.append(f"{n_ready} ready")
+        if downloading:
+            bits.append(f"{downloading} downloading")
+        self.queue_remaining.config(
+            text="  ".join(bits) if bits else "Last song")
+
+    def _album_picked(self, album):
+        """When a known album is picked, autofill its artist if empty."""
+        if not self.artist_entry.get().strip():
+            known = self.app.store.album_artist(album)
+            if known:
+                self.artist_entry.set_text(known)
 
     # ── Artwork ─────────────────────────────────────────────────────────────
     def _load_thumbnail(self, url):
@@ -206,20 +231,18 @@ class EditScreen(tk.Frame):
                 if not save_dir or not os.path.isdir(save_dir):
                     save_dir = self.app.save_dir
                 temp_path = os.path.join(save_dir, ".skipman_thumb.jpg")
-                img_full = Image.open(io.BytesIO(raw))
+                img_full = Image.open(io.BytesIO(raw)).convert("RGB")
                 img_full.save(temp_path, "JPEG", quality=95)
                 self._thumb_temp = temp_path
 
-                # Resize for display
                 display = img_full.resize((196, 196), Image.LANCZOS)
-                self.after(0, self._display_artwork, display, temp_path)
+                self.app.post(self._display_artwork, display, temp_path)
             except Exception:
-                self.after(0, self._show_no_art)
+                self.app.post(self._show_no_art)
 
         threading.Thread(target=_fetch, daemon=True).start()
 
     def _display_artwork(self, pil_img, path=None):
-        """Show a PIL image on the artwork canvas."""
         from PIL import ImageTk
         self.artwork_tk = ImageTk.PhotoImage(pil_img)
         self.art_canvas.delete("all")
@@ -245,7 +268,6 @@ class EditScreen(tk.Frame):
         )
 
     def _upload_artwork(self):
-        """Open file dialog to select custom artwork."""
         path = filedialog.askopenfilename(
             title="Select Artwork",
             filetypes=[
@@ -270,23 +292,34 @@ class EditScreen(tk.Frame):
 
     # ── Actions ─────────────────────────────────────────────────────────────
     def _save(self):
-        """Write ID3 tags (and artwork) to the MP3 file."""
-        from skipman.metadata import write_tags
+        """Write ID3 tags + artwork, clean the filename, remember for autofill."""
+        from skipman.metadata import write_tags, rename_to_clean
 
         fp = self.song_info.get("file_path", "")
         if not os.path.exists(fp):
             self._set_status("Error: MP3 file not found!", theme.ERROR)
-            return
+            return False
+
+        title = self.title_entry.get().strip()
+        artist = self.artist_entry.get().strip()
+        album = self.album_entry.get().strip()
 
         try:
             write_tags(
                 fp,
-                title=self.title_entry.get(),
-                artist=self.artist_entry.get(),
-                album=self.album_entry.get(),
+                title=title, artist=artist, album=album,
                 artwork_path=self.artwork_path if self.has_artwork else None,
                 clear_artwork=not self.has_artwork,
             )
+            new_fp = rename_to_clean(fp, title, artist)
+            self.song_info["file_path"] = new_fp
+            self.file_var.set(f"File: {new_fp}")
+
+            # Remember for autofill + duplicate detection
+            self.app.store.remember(
+                title=title, artist=artist, album=album, file=new_fp)
+            self.app.library.add(title, artist)
+
             self._set_status("Tags saved!", theme.SUCCESS)
             return True
         except Exception as e:
@@ -294,42 +327,39 @@ class EditScreen(tk.Frame):
             return False
 
     def _upload_to_itunes(self):
-        """Save tags then add to iTunes library."""
-        # Save tags first
-        saved = self._save()
-        if saved is False:
+        """Save tags then add to Apple Music library."""
+        if self._save() is False:
             return
 
         fp = self.song_info.get("file_path", "")
 
-        self.upload_btn.config(state="disabled", text="Uploading\u2026")
-        self._set_status("Adding to iTunes library\u2026", theme.AMBER)
+        self.upload_btn.config(state="disabled", text="Uploading…")
+        self._set_status("Adding to Apple Music library…", theme.AMBER)
 
         def _do_upload():
             try:
                 from skipman.itunes import add_to_itunes
-                success, msg = add_to_itunes(fp)
-                self.after(0, self._upload_done, msg, None)
+                _success, msg = add_to_itunes(fp)
+                self.app.post(self._upload_done, msg, None)
             except Exception as e:
-                self.after(0, self._upload_done, None, str(e))
+                self.app.post(self._upload_done, None, str(e))
 
         threading.Thread(target=_do_upload, daemon=True).start()
 
     def _upload_done(self, msg, error):
         self.upload_btn.config(
-            state="normal", text="\u266b  UPLOAD TO APPLE MUSIC")
+            state="normal", text="♫  UPLOAD TO APPLE MUSIC")
         if error:
-            self._set_status(f"iTunes error: {error}", theme.ERROR)
+            self._set_status(f"Apple Music error: {error}", theme.ERROR)
         else:
             self._set_status(msg, theme.SUCCESS)
-            # Auto-advance to next song after a brief pause
-            if self.app.queue:
-                self._set_status(
-                    f"{msg}  \u2014  Next song in 2s...", theme.SUCCESS)
+            # Auto-advance if more songs are waiting
+            if self.app.ready:
+                self._set_status(f"{msg}  — Next song in 2s...", theme.SUCCESS)
                 self.after(2000, self._advance_queue)
 
     def _skip(self):
-        """Skip this song without saving. Move to next in queue."""
+        """Skip this song without saving. Move to next ready song."""
         self._cleanup_temp()
         self.app.on_edit_done()
 
@@ -339,12 +369,10 @@ class EditScreen(tk.Frame):
         self.app.show_download_screen()
 
     def _advance_queue(self):
-        """Move to the next song in queue."""
         self._cleanup_temp()
         self.app.on_edit_done()
 
     def _cleanup_temp(self):
-        """Remove temporary thumbnail file."""
         if self._thumb_temp and os.path.exists(self._thumb_temp):
             try:
                 os.remove(self._thumb_temp)

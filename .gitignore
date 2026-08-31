@@ -21,6 +21,10 @@ env/
 # FFmpeg binary (downloaded at runtime)
 ffmpeg/
 
+# Runtime output
+downloads/
+*.log
+
 # Temp files
 *.tmp
 .skipman_thumb.*
