@@ -1,4 +1,4 @@
-# ── SkipMan — one-command push-live ─────────────────────────────────────────
+# == SkipMan -- one-command push-live ========================================
 # Usage (from Desktop\Superdev\BBProjectDevelopment\SkipMan):
 #     .\update.ps1 "what you changed"
 #
@@ -8,6 +8,7 @@
 #   3. git add / commit / push to GitHub (DaBillyDaGoat/SkipMan)
 #
 # Rules live in README.md. Short version: edit HERE, never in SongDL.
+# NOTE: keep this file ASCII-only. Fancy dashes/quotes break PowerShell 5.1.
 
 param(
     [string]$Message = ""
@@ -27,19 +28,19 @@ Write-Host "   src : $Src"
 Write-Host "   repo: $Repo"
 Write-Host ""
 
-# ── 1. Compile check ────────────────────────────────────────────────────────
+# -- 1. Compile check --------------------------------------------------------
 Write-Host "[1/3] Compile check..." -ForegroundColor Yellow
 $py = Get-Command python -ErrorAction SilentlyContinue
 if (-not $py) { Write-Host "python not found on PATH." -ForegroundColor Red; exit 1 }
 
 & python -m compileall -q (Join-Path $Src "skipman")
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "COMPILE FAILED — fix the errors above. Nothing was pushed." -ForegroundColor Red
+    Write-Host "COMPILE FAILED - fix the errors above. Nothing was pushed." -ForegroundColor Red
     exit 1
 }
 Write-Host "      OK" -ForegroundColor Green
 
-# ── 2. Sync working copy -> repo ────────────────────────────────────────────
+# -- 2. Sync working copy -> repo --------------------------------------------
 Write-Host "[2/3] Syncing to repo..." -ForegroundColor Yellow
 if (-not (Test-Path (Join-Path $Repo ".git"))) {
     Write-Host "Git repo not found at $Repo" -ForegroundColor Red
@@ -59,7 +60,7 @@ foreach ($f in $topFiles) {
 }
 Write-Host "      OK" -ForegroundColor Green
 
-# ── 3. Commit + push ────────────────────────────────────────────────────────
+# -- 3. Commit + push --------------------------------------------------------
 Write-Host "[3/3] Git commit + push..." -ForegroundColor Yellow
 Push-Location $Repo
 try {
@@ -69,12 +70,12 @@ try {
         Write-Host "      Nothing new to commit." -ForegroundColor Green
     } else {
         git commit -m $Message | Out-Null
-        Write-Host "      Committed: `"$Message`"" -ForegroundColor Green
+        Write-Host "      Committed: $Message" -ForegroundColor Green
     }
-    # Always push — catches commits made earlier that never went out
+    # Always push - catches commits made earlier that never went out
     git push origin master
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "PUSH FAILED — commit is saved locally; run 'git push' in $Repo when back online." -ForegroundColor Red
+        Write-Host "PUSH FAILED - commit is saved locally; run 'git push' in $Repo when back online." -ForegroundColor Red
         exit 1
     }
     Write-Host "      GitHub is up to date." -ForegroundColor Green
