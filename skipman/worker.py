@@ -75,7 +75,7 @@ class DownloadWorker:
     # ── Worker thread ───────────────────────────────────────────────────────
     def _run(self):
         from skipman.downloader import download_song
-        from skipman.ffmpeg_setup import ensure_ffmpeg
+        from skipman.ffmpeg import ensure_ffmpeg
 
         while True:
             job = self._jobs.get()
@@ -111,14 +111,6 @@ class DownloadWorker:
                     job.url, self._get_save_dir(),
                     progress_callback=hook, ffmpeg_location=ffmpeg_loc)
 
-                # Carry playlist/queue metadata into the result
-                if job.artist and not result.get("artist"):
-                    result["artist"] = job.artist
-                if job.album:
-                    result["album"] = job.album
-                if job.track_no:
-                    result["track_no"] = job.track_no
-                result["group"] = job.group
                 result["job_id"] = job.id
 
                 self._emit("done", job=job, result=result)

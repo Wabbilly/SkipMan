@@ -3,6 +3,40 @@
 All notable changes to SkipMan live here. Add a dated entry at the top
 every time you change the app (see README.md for the update rules).
 
+## v3.0.0 — 2026-10-26
+
+Full rebuild: simpler, smarter, and now on Mac.
+
+### Changed
+- **One window.** Paste bar, queue and tag panel together; no more jumping
+  between Download / Edit / Arrange screens or the EDIT READY button.
+- **One action.** SAVE TAGS + UPLOAD merged into SEND (or Enter), which
+  jumps straight to the next ready song.
+- **Albums inline.** Playlists show as an album group you drag into order
+  right in the queue; one toggle for album vs. separate songs. Nothing
+  downloads until you hit DOWNLOAD. "SEND n READY" sends a whole album.
+- **Duplicates inline** (amber DUPE + SKIP / GET IT ANYWAY), no popup.
+- Save folder moved to ⚙ Settings; log box removed (status bar instead).
+- New UI engine (pywebview) so the Winamp/mIRC look renders the same on
+  Mac and Windows.
+
+### Added
+- **Mac version** with installer, Dock icon, and Apple Music import via the
+  Music app + an automatic **"SkipMan" playlist**.
+- **Smart artist identification** with confidence lights, Apple + Deezer
+  catalog checks (title + artist + length), repost-account detection,
+  feat./remix/lead-artist rules, version-tag handling, preferred spellings
+  and learning from every correction. Optional AcoustID sound matching.
+- Official HD artwork from the catalog; YouTube thumbnails cropped square.
+- Copied-link detection, drop links on the window or Dock icon,
+  `skipman://add?url=` links.
+- **Auto-update on launch** from GitHub (replaces update.ps1).
+- Tests for the identification rules.
+
+### Removed
+- update.ps1 / SongDL mirror workflow, SkipMan.vbs, SkipMan.pyw, Tkinter
+  screens, runtime pip installs, Windows-only FFmpeg zip download.
+
 ## v2.0.0 — 2026-08-31
 
 ### Added

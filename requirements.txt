@@ -1,4 +1,6 @@
 yt-dlp
 mutagen
-Pillow
 requests
+Pillow
+pywebview>=5.0
+static-ffmpeg

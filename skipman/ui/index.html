@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SkipMan</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header>
+    <div>
+      <h1>// SKIPMAN <span id="ver"></span></h1>
+      <div class="sub">YouTube · SoundCloud (songs + playlists) · and more</div>
+    </div>
+    <button id="settingsBtn" class="btn small" title="Settings">⚙</button>
+  </header>
+  <div class="rule"></div>
+
+  <div id="updateBar" class="banner green hidden">
+    <span id="updateMsg"></span>
+    <button id="restartBtn" class="btn accent small">RESTART</button>
+  </div>
+
+  <label class="lbl">PASTE LINK <span class="muted">(song or playlist — or drop links anywhere)</span></label>
+  <div class="row">
+    <input id="url" class="field grow" spellcheck="false" autocomplete="off"
+           placeholder="https://…">
+    <button id="addBtn" class="btn">ADD</button>
+  </div>
+
+  <div id="clipBar" class="banner amber hidden">
+    <span>COPIED LINK: <b id="clipUrl"></b></span>
+    <span>
+      <button id="clipAdd" class="btn accent small">ADD IT</button>
+      <button id="clipNo" class="btn small">×</button>
+    </span>
+  </div>
+
+  <div class="row between">
+    <label class="lbl" id="queueLbl">QUEUE (0)</label>
+    <button id="clearBtn" class="btn small">CLEAR SENT</button>
+  </div>
+  <div id="list" class="sunken"></div>
+
+  <section id="panel" class="panel hidden">
+    <div class="art-col">
+      <div id="art" class="art sunken"><span>NO ART</span></div>
+      <div class="art-btns">
+        <button id="artBtn" class="btn small">CHANGE ART</button>
+        <button id="noArtBtn" class="btn small">NO ART</button>
+      </div>
+    </div>
+    <div class="fields">
+      <div id="whyLine" class="why"></div>
+      <label class="lbl">TITLE</label>
+      <input id="fTitle" class="field" spellcheck="false" autocomplete="off">
+      <label class="lbl">ARTIST</label>
+      <div class="ac-wrap">
+        <input id="fArtist" class="field" spellcheck="false" autocomplete="off">
+        <div class="ac hidden" data-for="fArtist"></div>
+      </div>
+      <label class="lbl">ALBUM</label>
+      <div class="ac-wrap">
+        <input id="fAlbum" class="field" spellcheck="false" autocomplete="off">
+        <div class="ac hidden" data-for="fAlbum"></div>
+      </div>
+      <div class="row end gap">
+        <button id="skipBtn" class="btn">SKIP</button>
+        <button id="sendBtn" class="btn accent big">♫ SEND TO APPLE MUSIC ↵</button>
+      </div>
+    </div>
+  </section>
+  <div id="idle" class="idle">Paste a link to get started. Songs download in
+    the background; you approve each one before it goes to Apple Music.</div>
+
+  <footer class="statusbar">
+    <span id="status" class="st">Starting…</span>
+    <span id="counts" class="st right"></span>
+  </footer>
+</div>
+
+<div id="settings" class="modal hidden">
+  <div class="dialog">
+    <div class="titlebar">SETTINGS <button id="setClose" class="btn small">×</button></div>
+    <div class="dialog-body">
+      <label class="lbl">SAVE DOWNLOADS TO</label>
+      <div class="row"><input id="sDir" class="field grow" readonly>
+        <button id="sDirBtn" class="btn small">CHANGE</button></div>
+      <label class="lbl">ACOUSTID KEY <span class="muted">(optional — identifies songs by sound)</span></label>
+      <div class="row"><input id="sKey" class="field grow" spellcheck="false">
+        <button id="sKeyBtn" class="btn small">SAVE</button></div>
+      <div id="sKeyNote" class="muted small"></div>
+      <div class="muted small" id="sVer"></div>
+    </div>
+  </div>
+</div>
+
+<div id="dropHint" class="drop hidden">DROP LINK TO ADD</div>
+<script src="app.js"></script>
+</body>
+</html>

@@ -8,8 +8,6 @@ import re
 import threading
 import difflib
 
-AM_MEDIA = os.path.join(
-    os.path.expanduser("~"), "Music", "Apple Music", "Media")
 
 AUDIO_EXTS = {".mp3", ".m4a", ".aac", ".aiff", ".wav", ".flac", ".ogg", ".opus"}
 
@@ -94,14 +92,28 @@ class LibraryIndex:
     # ── Apple Music scan (background, cached) ───────────────────────────────
     def scan_apple_music_async(self, on_done=None):
         """Scan the Apple Music media folder in a background thread."""
-        if self._scanning or not os.path.isdir(AM_MEDIA):
+        if self._scanning:
             return
         self._scanning = True
 
         def _scan():
             try:
+                from skipman import applemusic
+                # Mac: ask the Music app directly (fast, includes cloud songs)
+                lib = applemusic.library_tracks()
+                if lib is not None:
+                    tracks = [{"title": t, "artist": a} for t, a in lib if t]
+                    self.store.set_am_cache({"sig": f"app:{len(tracks)}",
+                                             "tracks": tracks})
+                    self._load_history()
+                    if on_done:
+                        on_done(len(tracks))
+                    return
+                media = applemusic.media_folder()
+                if not media:
+                    return
                 files = []
-                for root, _dirs, names in os.walk(AM_MEDIA):
+                for root, _dirs, names in os.walk(media):
                     for n in names:
                         if os.path.splitext(n)[1].lower() in AUDIO_EXTS:
                             files.append(os.path.join(root, n))

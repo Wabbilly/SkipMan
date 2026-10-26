@@ -1,73 +1,70 @@
-# SkipMan v2
+# SkipMan v3
 
-Download songs (YouTube / SoundCloud / more), tag them, and send them to
-Apple Music — in a small retro window that does the work for you.
+Download songs (YouTube / SoundCloud / more), get the tags right, and send
+them to Apple Music — in one small retro window. Works on Mac and Windows.
 
-## What it does
+## How it works
 
-1. Paste a URL (song **or playlist**) and hit ADD.
-2. SkipMan checks it against your library (download history + Apple Music
-   scan) and warns you about duplicates before wasting a download.
-3. Downloads run on a background worker — keep pasting links or editing
-   tags while they come in at 320kbps MP3.
-4. The edit screen autofills artists/albums you've used before, embeds
-   artwork, cleans the filename, and uploads to Apple Music's
-   "Automatically Add" folder.
-5. Playlists become albums: arrange the track order on one quick screen,
-   and every track is tagged with album, album artist, track number and
-   artwork — auto-uploaded as each one finishes if you want.
+1. **Paste a link** (or drop it on the window / Dock icon, or just copy it —
+   SkipMan offers any music link you've copied when you switch to it).
+2. SkipMan says what it is: a **song**, or a **playlist** → saved as an
+   **album** (or flip it to separate songs). Albums can be dragged into
+   order before anything downloads.
+3. Downloads run in the background while SkipMan **figures out the real
+   artist and title** (see below). Each row gets a light:
+   🟢 matched · 🟡 best guess · 🔴 check me.
+4. You review each song, fix anything, hit **Enter** → it goes to Apple Music.
+   On Mac it also lands in a **"SkipMan" playlist** (created automatically).
+
+## Artist identification
+
+Trust order: your past corrections → Apple's catalog (Deezer as backup;
+only accepted when title, artist **and length** agree) → YouTube Music
+fields → the title ("Artist - Song", "Song by Artist", …) → the uploader,
+only if it's the artist's own account. Optional: identify by sound
+(AcoustID key in ⚙ Settings + `brew install chromaprint`).
+
+Rules: repost accounts never become the artist · `(feat. X)` only for real
+guests · remixes keep the original artist · two credited leads both go in
+the artist field · slowed / sped up / prod. by / live / remastered /
+acoustic / demo stay in the title · your spellings win (Kanye West, not Ye).
+
+It learns: fix an artist once and SkipMan remembers that upload, whether the
+account was a repost page, and your preferred spelling.
+
+## Install
+
+**Mac:** double-click `mac/install.command` (one time). It sets up
+everything, adds SkipMan to Applications and the Dock, and opens it.
+
+**Windows:** double-click `SkipMan.bat` (first run takes a minute).
+
+**Updates are automatic** on both: every launch checks GitHub
+(Wabbilly/SkipMan) and installs anything new, then shows a RESTART button.
 
 ## Files
 
 | Path | What it is |
 |---|---|
-| `SkipMan.bat` / `SkipMan.vbs` / `skipman.pyw` | Launchers (double-click the .bat) |
-| `skipman/app.py` | Main window, screen switching, worker events |
-| `skipman/worker.py` | Background download queue (the pipelining) |
-| `skipman/downloader.py` | yt-dlp probe + download |
-| `skipman/download_screen.py` | Screen 1 — paste URLs, queue, log |
-| `skipman/edit_screen.py` | Screen 2 — tags, artwork, upload |
-| `skipman/album_screen.py` | Screen 3 — arrange playlist → album |
-| `skipman/store.py` | Persistent memory (autofill, history, settings) |
-| `skipman/library.py` | Duplicate detection index |
-| `skipman/metadata.py` | ID3 read/write + filename cleanup |
-| `skipman/itunes.py` | Apple Music integration |
-| `skipman/ffmpeg_setup.py` | FFmpeg auto-download |
-| `skipman/theme.py` / `widgets.py` | Retro theme + autofill/popup widgets |
+| `main.py` | Starts the app (one window; extra launches hand links to it) |
+| `skipman/api.py` | The controller: queue, albums, review, sending |
+| `skipman/identify.py` | Artist/title identification + learning |
+| `skipman/catalog.py` | Apple / Deezer catalog + AcoustID lookups |
+| `skipman/applemusic.py` | Mac Music app + Windows auto-add folder |
+| `skipman/downloader.py`, `worker.py` | yt-dlp probe + background downloads |
+| `skipman/library.py` | Duplicate check against history + Apple Music |
+| `skipman/store.py` | Everything SkipMan remembers |
+| `skipman/updater.py` | Auto-update from GitHub |
+| `skipman/ui/` | The window (HTML/CSS/JS, Winamp-style) |
+| `mac/` | Mac installer + Dock launcher · `SkipMan.bat` = Windows |
+| `tests/` | `python -m pytest tests` |
 
-User data (autofill memory, history, settings, Apple Music scan cache)
-lives in `%LOCALAPPDATA%\SkipMan\store.json` — delete that file for a
-factory reset. Deleting it also clears duplicate-detection history.
+Your data (memory, history, settings) lives in
+`~/Library/Application Support/SkipMan` (Mac) or `%LOCALAPPDATA%\SkipMan`
+(Windows). Delete `store.json` there for a factory reset.
 
-## RULES — editing & pushing live
+## Changing SkipMan
 
-These exist so future edits stay painless. Follow them every time.
-
-1. **Edit in ONE place only:** `Desktop\Superdev\BBProjectDevelopment\SkipMan`
-   is the working copy. **Never** edit `Desktop\Superdev\SongDL` by hand —
-   it's the git mirror and gets overwritten on every push.
-2. **Test before pushing:** double-click `SkipMan.bat` and make sure the
-   app opens and a download works. `update.ps1` also refuses to push if
-   any file fails to compile.
-3. **Log every change:** add a line (or a dated section) to `CHANGELOG.md`
-   describing what you changed. If the change is user-visible, bump the
-   version in `skipman/__init__.py` (that's the only place the version
-   number lives — the window title and screens read it from there).
-4. **Push live with one command** (from the SkipMan folder, right-click →
-   "Run with PowerShell" or):
-
-   ```powershell
-   .\update.ps1 "what you changed"
-   ```
-
-   This compiles everything, mirrors the working copy into `SongDL`,
-   commits, and pushes to GitHub (Wabbilly/SkipMan). No message?
-   It uses a dated default.
-5. **Don't commit junk:** `__pycache__`, `downloads/`, `ffmpeg/`, logs and
-   the store file are excluded by the sync + `.gitignore`. Keep it that way.
-
-## Requirements
-
-Python 3.11+ with tkinter. Everything else (yt-dlp, mutagen, Pillow,
-requests) auto-installs on first run; FFmpeg auto-downloads next to the
-app. `pip install -r requirements.txt` works too.
+Edit, run `python -m pytest tests`, add a line to `CHANGELOG.md`, bump
+`skipman/__init__.py` if it's user-visible, push to `master`. Both computers
+pick it up on their next launch.
