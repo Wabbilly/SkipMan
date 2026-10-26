@@ -5,7 +5,7 @@
 # Does, in order:
 #   1. Compile-checks every skipman/*.py file (aborts on any error)
 #   2. Mirrors this working copy into the git repo (Superdev\SongDL)
-#   3. git add / commit / push to GitHub (DaBillyDaGoat/SkipMan)
+#   3. git add / commit / push to GitHub (Wabbilly/SkipMan)
 #
 # Rules live in README.md. Short version: edit HERE, never in SongDL.
 # NOTE: keep this file ASCII-only. Fancy dashes/quotes break PowerShell 5.1.

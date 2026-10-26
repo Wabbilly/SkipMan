@@ -61,7 +61,7 @@ These exist so future edits stay painless. Follow them every time.
    ```
 
    This compiles everything, mirrors the working copy into `SongDL`,
-   commits, and pushes to GitHub (DaBillyDaGoat/SkipMan). No message?
+   commits, and pushes to GitHub (Wabbilly/SkipMan). No message?
    It uses a dated default.
 5. **Don't commit junk:** `__pycache__`, `downloads/`, `ffmpeg/`, logs and
    the store file are excluded by the sync + `.gitignore`. Keep it that way.
