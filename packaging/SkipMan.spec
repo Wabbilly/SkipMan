@@ -32,6 +32,14 @@ a = Analysis(
               "PySide2", "PySide6", "gi", "matplotlib", "numpy"],
     noarchive=False,
 )
+# FFmpeg's own DLLs sit next to ffmpeg.exe in ffmpeg/; PyInstaller also
+# copies them to the top level (unused there). Drop those duplicates.
+if IS_WIN and os.path.isdir(ff):
+    ffnames = {n.lower() for n in os.listdir(ff)}
+    a.binaries = [b for b in a.binaries
+                  if not ("/" not in b[0].replace("\\", "/")
+                          and b[0].lower() in ffnames)]
+
 pyz = PYZ(a.pure)
 
 icon = None
