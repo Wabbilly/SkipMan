@@ -40,9 +40,11 @@ case "$1" in
     file "$DEST"/*
     ;;
   windows)
-    fetch "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" "$TMP/ff.zip"
+    # LGPL shared build: ffmpeg + ffprobe share one set of DLLs (much smaller)
+    fetch "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl-shared.zip" "$TMP/ff.zip"
     unzip -q "$TMP/ff.zip" -d "$TMP/ff"
-    cp "$TMP"/ff/*/bin/ffmpeg.exe "$TMP"/ff/*/bin/ffprobe.exe "$DEST/"
+    cp "$TMP"/ff/*/bin/ffmpeg.exe "$TMP"/ff/*/bin/ffprobe.exe "$TMP"/ff/*/bin/*.dll "$DEST/"
+    "$DEST/ffmpeg.exe" -hide_banner -encoders 2>/dev/null | grep -q libmp3lame || { echo "no mp3 encoder"; exit 1; }
     ;;
   *) echo "unknown target $1"; exit 1 ;;
 esac
