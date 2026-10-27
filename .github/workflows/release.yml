@@ -1,13 +1,15 @@
-# Builds the downloadable SkipMan apps and publishes them as a GitHub Release.
-# Trigger: push a tag like v3.0.1 (or run manually from the Actions tab).
+# Builds the downloadable SkipMan apps and attaches them to a GitHub Release.
+# Trigger: publish a release on GitHub (tag like v3.0.1), or push such a tag.
 # Every build runs SkipMan's self-test (real download + FFmpeg + tagging)
 # before anything is published.
 
 name: Release
 
 on:
+  release:
+    types: [published]     # attach apps to a release made on GitHub
   push:
-    tags: ["v*"]           # publish a release
+    tags: ["v*"]           # or: pushing a tag creates the release
     branches: ["ci/**"]    # test builds only (nothing published)
   workflow_dispatch:
 
@@ -110,22 +112,24 @@ jobs:
 
   release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: assets
           merge-multiple: true
-      - name: Release notes from CHANGELOG
+      - name: Create the release (tag pushes only)
+        if: github.event_name == 'push'
         run: |
-          awk -v tag="## ${GITHUB_REF_NAME}" 'index($0, tag)==1 {on=1; next} /^## v/ && on {exit} on' CHANGELOG.md > notes.md
+          awk -v tag="## ${TAG}" 'index($0, tag)==1 {on=1; next} /^## v/ && on {exit} on' CHANGELOG.md > notes.md
           cat packaging/release-footer.md >> notes.md
-      - name: Publish
-        env:
-          GH_TOKEN: ${{ github.token }}
+          gh release create "$TAG" --title "SkipMan ${TAG}" --notes-file notes.md
+      - name: Attach the apps
         run: |
           ls -la assets
-          gh release create "$GITHUB_REF_NAME" assets/*.zip \
-            --title "SkipMan ${GITHUB_REF_NAME}" --notes-file notes.md
+          gh release upload "$TAG" assets/*.zip --clobber
