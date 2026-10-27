@@ -80,7 +80,9 @@ python -m pytest tests    # identification rules
 | `packaging/` | App build recipe (PyInstaller), icons, FFmpeg fetch |
 | `.github/workflows/release.yml` | Builds + self-tests + publishes releases |
 
-**Releasing:** bump `skipman/__init__.py`, add a `## vX.Y.Z` section to
-`CHANGELOG.md`, push, then tag (`git tag vX.Y.Z && git push --tags`). GitHub
-builds the Mac and Windows apps, self-tests each one with a real download,
-and publishes the release. Installed copies update themselves.
+**Releasing:** bump `__version__` in `skipman/__init__.py`, add a
+`## vX.Y.Z` section to `CHANGELOG.md`, and push to `master`. That's it:
+GitHub builds the Mac and Windows apps, self-tests each one with a real
+download and a window check, and publishes the release. Installed copies
+update themselves. (Push to a `ci/...` branch for a test build that
+publishes nothing.)

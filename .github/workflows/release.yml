@@ -1,16 +1,16 @@
-# Builds the downloadable SkipMan apps and attaches them to a GitHub Release.
-# Trigger: publish a release on GitHub (tag like v3.0.1), or push such a tag.
+# Builds the downloadable SkipMan apps and publishes them as a GitHub Release.
+#
+# Releasing = bump __version__ in skipman/__init__.py (+ a CHANGELOG section)
+# and push to master. If no release exists for that version yet, this builds
+# the Mac + Windows apps, self-tests them, and publishes "vX.Y.Z".
 # Every build runs SkipMan's self-test (real download + FFmpeg + tagging)
 # before anything is published.
 
 name: Release
 
 on:
-  release:
-    types: [published]     # attach apps to a release made on GitHub
   push:
-    tags: ["v*"]           # or: pushing a tag creates the release
-    branches: ["ci/**"]    # test builds only (nothing published)
+    branches: [master, "ci/**"]   # ci/* = test builds, never published
   workflow_dispatch:
 
 permissions:
@@ -20,7 +20,28 @@ env:
   TEST_URL: https://soundcloud.com/bvrnout/drake-hotling-bling-bvrnoutremix
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER=$(python3 -c "import re;print(re.search(r'__version__\s*=\s*\"([^\"]+)\"',open('skipman/__init__.py').read()).group(1))")
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF" = refs/heads/master ] && ! gh release view "v$VER" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release=true" >> "$GITHUB_OUTPUT"; echo "New version v$VER: will build + release"
+          else
+            echo "release=false" >> "$GITHUB_OUTPUT"; echo "v$VER already released (or not master)"
+          fi
+
   build:
+    needs: check
+    if: needs.check.outputs.release == 'true' || github.ref != 'refs/heads/master'
     name: ${{ matrix.asset }}
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.optional }}
@@ -111,25 +132,22 @@ jobs:
           path: ${{ matrix.asset }}.zip
 
   release:
-    needs: build
-    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
+    needs: [check, build]
+    if: needs.check.outputs.release == 'true'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
-      TAG: ${{ github.event.release.tag_name || github.ref_name }}
+      TAG: v${{ needs.check.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: assets
           merge-multiple: true
-      - name: Create the release (tag pushes only)
-        if: github.event_name == 'push'
+      - name: Publish
         run: |
           awk -v tag="## ${TAG}" 'index($0, tag)==1 {on=1; next} /^## v/ && on {exit} on' CHANGELOG.md > notes.md
           cat packaging/release-footer.md >> notes.md
-          gh release create "$TAG" --title "SkipMan ${TAG}" --notes-file notes.md
-      - name: Attach the apps
-        run: |
           ls -la assets
-          gh release upload "$TAG" assets/*.zip --clobber
+          gh release create "$TAG" assets/*.zip --target "$GITHUB_SHA" \
+            --title "SkipMan ${TAG}" --notes-file notes.md
