@@ -7,8 +7,25 @@ import shutil
 IS_MAC = sys.platform == "darwin"
 IS_WIN = sys.platform.startswith("win")
 
-APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-UI_DIR = os.path.join(APP_DIR, "skipman", "ui")
+# FROZEN = running as the downloadable app (built with PyInstaller)
+FROZEN = bool(getattr(sys, "frozen", False))
+if FROZEN:
+    BUNDLE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+    APP_DIR = os.path.dirname(os.path.abspath(sys.executable))
+else:
+    APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    BUNDLE_DIR = APP_DIR
+UI_DIR = os.path.join(BUNDLE_DIR, "skipman", "ui")
+
+
+def app_bundle():
+    """Mac: path of SkipMan.app when running the downloaded app."""
+    if FROZEN and IS_MAC:
+        p = os.path.abspath(sys.executable)
+        while p != "/" and not p.endswith(".app"):
+            p = os.path.dirname(p)
+        return p if p.endswith(".app") else None
+    return None
 
 
 def data_dir():

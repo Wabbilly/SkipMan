@@ -47,6 +47,7 @@ class Api:
         self._status = ("Starting…", "amber")
         self._offered_clip = set()
         self._update = None
+        self.ui_loaded = threading.Event()
         self._save_dir = store.get_setting("save_dir", default_save_dir())
 
         from skipman.worker import DownloadWorker, Job
@@ -640,6 +641,7 @@ class Api:
 
     def ready(self):
         """Called by the UI once it has loaded."""
+        self.ui_loaded.set()
         self._push(force=True)
         return self._snapshot()
 

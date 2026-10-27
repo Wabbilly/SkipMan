@@ -34,6 +34,8 @@ Thumbs.db
 .DS_Store
 desktop.ini
 
-# SkipMan install state
-.installed_commit
-SkipMan.app/
+
+# Packaging output
+build/
+dist/
+*.zip

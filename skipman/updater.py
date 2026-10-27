@@ -1,158 +1,143 @@
-# ── Auto-update from GitHub on launch ───────────────────────────────────────
-# Checks github.com/Wabbilly/SkipMan for a newer commit. If there is one, it
-# downloads it, swaps the code in place (your settings, memory and music are
-# untouched) and offers a RESTART button. No scripts to run, ever.
+# ── Auto-update from GitHub Releases ────────────────────────────────────────
+# On launch the app checks github.com/Wabbilly/SkipMan/releases for a newer
+# version. If there is one, it downloads it in the background and shows a
+# RESTART button; restarting swaps the new app in and reopens it. Your
+# settings, memory and music are never touched.
+#
+# Running from source (python main.py in a git checkout) instead does a
+# quiet `git pull`.
 
-import io
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import zipfile
 
-from skipman.paths import APP_DIR, IS_WIN
+from skipman import __version__
+from skipman.paths import APP_DIR, FROZEN, IS_MAC, IS_WIN, app_bundle, data_dir
 
 REPO = "Wabbilly/SkipMan"
-BRANCH = "master"
-STAMP = os.path.join(APP_DIR, ".installed_commit")
-
-# Never touched by an update
-PROTECTED = {".venv", "venv", "ffmpeg", "downloads", ".git",
-             ".installed_commit", "SkipMan.app", "__pycache__"}
+_staged = {}            # what's ready to install on restart
 
 
-def _read_stamp():
-    try:
-        with open(STAMP) as f:
-            return f.read().strip()
-    except OSError:
-        return ""
+def _ver(s):
+    return tuple(int(x) for x in re.findall(r"\d+", s or "")[:3]) or (0,)
 
 
-def _write_stamp(sha):
-    try:
-        with open(STAMP, "w") as f:
-            f.write(sha)
-    except OSError:
-        pass
-
-
-def latest_commit():
-    import requests
-    r = requests.get(f"https://api.github.com/repos/{REPO}/commits/{BRANCH}",
-                     headers={"Accept": "application/vnd.github.sha"},
-                     timeout=8)
-    r.raise_for_status()
-    return r.text.strip()
-
-
-def check_and_update(status=None):
-    """Returns {'message', 'version'} if an update was installed, else None."""
-    if os.environ.get("SKIPMAN_NO_UPDATE"):
-        return None
-    # A developer checkout: just fast-forward with git
-    if os.path.isdir(os.path.join(APP_DIR, ".git")) and shutil.which("git"):
-        return _git_update()
-    try:
-        sha = latest_commit()
-    except Exception:
-        return None
-    have = _read_stamp()
-    if not have:
-        _write_stamp(sha)       # first launch: this IS the latest
-        return None
-    if sha == have:
-        return None
-    if status:
-        status("Updating SkipMan…")
-    try:
-        _install_zip(sha)
-    except Exception:
-        return None
-    _write_stamp(sha)
-    return {"message": "SkipMan updated — hit RESTART to use the new version.",
-            "version": _new_version()}
-
-
-def _git_update():
-    try:
-        before = subprocess.run(["git", "-C", APP_DIR, "rev-parse", "HEAD"],
-                                capture_output=True, text=True, timeout=10).stdout
-        r = subprocess.run(["git", "-C", APP_DIR, "pull", "--ff-only", "-q"],
-                           capture_output=True, text=True, timeout=60)
-        after = subprocess.run(["git", "-C", APP_DIR, "rev-parse", "HEAD"],
-                               capture_output=True, text=True, timeout=10).stdout
-        if r.returncode == 0 and before != after:
-            _pip_install()
-            return {"message": "SkipMan updated — hit RESTART to use the new "
-                               "version.", "version": _new_version()}
-    except Exception:
-        pass
+def asset_name():
+    """Which download fits this computer."""
+    if IS_MAC:
+        import platform
+        return ("SkipMan-mac-apple-silicon.zip" if platform.machine() == "arm64"
+                else "SkipMan-mac-intel.zip")
+    if IS_WIN:
+        return "SkipMan-windows.zip"
     return None
 
 
-def _install_zip(sha):
-    import requests
-    r = requests.get(f"https://codeload.github.com/{REPO}/zip/{sha}", timeout=60)
-    r.raise_for_status()
-    old_req = _read(os.path.join(APP_DIR, "requirements.txt"))
-    tmp = tempfile.mkdtemp(prefix="skipman-update-")
-    with zipfile.ZipFile(io.BytesIO(r.content)) as z:
-        z.extractall(tmp)
-    root = os.path.join(tmp, os.listdir(tmp)[0])
-    for name in os.listdir(root):
-        if name in PROTECTED:
-            continue
-        src, dst = os.path.join(root, name), os.path.join(APP_DIR, name)
-        if os.path.isdir(src):
-            if os.path.isdir(dst):
-                shutil.rmtree(dst, ignore_errors=True)
-            shutil.copytree(src, dst)
-        else:
-            shutil.copy2(src, dst)
-    for sh in ("mac/install.command", "mac/run.sh", "SkipMan.command"):
-        p = os.path.join(APP_DIR, sh)
-        if os.path.exists(p):
-            os.chmod(p, 0o755)
-    shutil.rmtree(tmp, ignore_errors=True)
-    if _read(os.path.join(APP_DIR, "requirements.txt")) != old_req:
-        _pip_install()
-
-
-def _pip_install():
-    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if IS_WIN else 0
-    uv = shutil.which("uv") or os.path.expanduser("~/.local/bin/uv")
-    req = os.path.join(APP_DIR, "requirements.txt")
-    if os.path.exists(uv):
-        cmd = [uv, "pip", "install", "-q", "--python", sys.executable, "-r", req]
-    else:
-        cmd = [sys.executable, "-m", "pip", "install", "-q", "-r", req]
-    subprocess.run(cmd, capture_output=True, timeout=600, creationflags=flags)
-
-
-def _read(p):
+def check_and_update(status=None):
+    """Returns {'message', 'version'} when an update is ready, else None."""
+    if os.environ.get("SKIPMAN_NO_UPDATE"):
+        return None
+    if not FROZEN:
+        return _git_update()
     try:
-        with open(p) as f:
-            return f.read()
-    except OSError:
-        return ""
+        import requests
+        r = requests.get(f"https://api.github.com/repos/{REPO}/releases/latest",
+                         timeout=8)
+        r.raise_for_status()
+        rel = r.json()
+    except Exception:
+        return None
+    latest = rel.get("tag_name", "")
+    if _ver(latest) <= _ver(__version__):
+        return None
+    want = asset_name()
+    asset = next((a for a in rel.get("assets", []) if a.get("name") == want), None)
+    if not asset:
+        return None
+    if status:
+        status(f"Downloading SkipMan {latest}…")
+    try:
+        new_app = _download(asset["browser_download_url"])
+    except Exception:
+        return None
+    _staged["path"] = new_app
+    return {"message": f"SkipMan {latest} is ready — hit RESTART to switch.",
+            "version": latest.lstrip("v")}
 
 
-def _new_version():
-    import re
-    m = re.search(r'__version__\s*=\s*"([^"]+)"',
-                  _read(os.path.join(APP_DIR, "skipman", "__init__.py")))
-    return m.group(1) if m else ""
+def _download(url):
+    import requests
+    work = os.path.join(data_dir(), "update")
+    shutil.rmtree(work, ignore_errors=True)
+    os.makedirs(work)
+    zpath = os.path.join(work, "new.zip")
+    with requests.get(url, stream=True, timeout=60) as r:
+        r.raise_for_status()
+        with open(zpath, "wb") as f:
+            for chunk in r.iter_content(1 << 20):
+                f.write(chunk)
+    out = os.path.join(work, "new")
+    if IS_MAC:   # ditto keeps the app's symlinks + signature intact
+        subprocess.run(["ditto", "-x", "-k", zpath, out], check=True)
+        app = next(os.path.join(out, n) for n in os.listdir(out)
+                   if n.endswith(".app"))
+        subprocess.run(["xattr", "-dr", "com.apple.quarantine", app],
+                       capture_output=True)
+        return app
+    with zipfile.ZipFile(zpath) as z:
+        z.extractall(out)
+    # zip holds a "SkipMan" folder with SkipMan.exe inside
+    for root, _d, files in os.walk(out):
+        if "SkipMan.exe" in files:
+            return root
+    raise RuntimeError("SkipMan.exe not found in update")
 
 
 def restart():
-    """Start a fresh copy of SkipMan, then quit this one."""
-    args = [sys.executable, os.path.join(APP_DIR, "main.py"), "--restarted"]
-    kw = {}
-    if IS_WIN:
-        kw["creationflags"] = 0x00000008 | 0x00000200   # detached
+    """Swap in a downloaded update (if any) and reopen SkipMan."""
+    new = _staged.get("path")
+    pid = os.getpid()
+    if FROZEN and IS_MAC:
+        target = app_bundle()
+        script = (
+            f'while kill -0 {pid} 2>/dev/null; do sleep 0.2; done; '
+            + (f'rm -rf "{target}" && mv "{new}" "{target}"; ' if new else "")
+            + f'open "{target}"')
+        subprocess.Popen(["/bin/sh", "-c", script], start_new_session=True)
+    elif FROZEN and IS_WIN:
+        exe = os.path.join(APP_DIR, "SkipMan.exe")
+        bat = os.path.join(tempfile.gettempdir(), "skipman-update.bat")
+        with open(bat, "w") as f:
+            f.write("@echo off\r\n"
+                    f':wait\r\ntasklist /FI "PID eq {pid}" | find "{pid}" >nul '
+                    "&& (timeout /t 1 >nul & goto wait)\r\n")
+            if new:
+                f.write(f'robocopy "{new}" "{APP_DIR}" /E /NFL /NDL /NJH /NJS >nul\r\n')
+            f.write(f'start "" "{exe}"\r\n')
+        subprocess.Popen(["cmd", "/c", bat], creationflags=0x08000000)
     else:
-        kw["start_new_session"] = True
-    subprocess.Popen(args, cwd=APP_DIR, **kw)
+        subprocess.Popen([sys.executable, os.path.join(APP_DIR, "main.py"),
+                          "--restarted"], cwd=APP_DIR, start_new_session=True)
     os._exit(0)
+
+
+def _git_update():
+    if not os.path.isdir(os.path.join(APP_DIR, ".git")) or not shutil.which("git"):
+        return None
+    try:
+        def head():
+            return subprocess.run(["git", "-C", APP_DIR, "rev-parse", "HEAD"],
+                                  capture_output=True, text=True, timeout=10).stdout
+        before = head()
+        r = subprocess.run(["git", "-C", APP_DIR, "pull", "--ff-only", "-q"],
+                           capture_output=True, text=True, timeout=60)
+        if r.returncode == 0 and head() != before:
+            return {"message": "Pulled new code — hit RESTART to use it.",
+                    "version": ""}
+    except Exception:
+        pass
+    return None

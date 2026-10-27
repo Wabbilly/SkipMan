@@ -1,9 +1,9 @@
 # SkipMan Changelog
 
-All notable changes to SkipMan live here. Add a dated entry at the top
-every time you change the app (see README.md for the update rules).
+All notable changes to SkipMan live here. Add a `## vX.Y.Z` section at the
+top for each release; it becomes the release notes on GitHub.
 
-## v3.0.0 — 2026-10-26
+## v3.0.0 — 2026-10-27
 
 Full rebuild: simpler, smarter, and now on Mac.
 
@@ -21,8 +21,11 @@ Full rebuild: simpler, smarter, and now on Mac.
   Mac and Windows.
 
 ### Added
-- **Mac version** with installer, Dock icon, and Apple Music import via the
-  Music app + an automatic **"SkipMan" playlist**.
+- **Downloadable apps** for Mac (Apple Silicon, plus Intel when available)
+  and Windows. No Python or FFmpeg to install; built and self-tested by
+  GitHub on every release.
+- **Mac version** with Apple Music import via the Music app and an
+  automatic **"SkipMan" playlist**.
 - **Smart artist identification** with confidence lights, Apple + Deezer
   catalog checks (title + artist + length), repost-account detection,
   feat./remix/lead-artist rules, version-tag handling, preferred spellings
@@ -30,12 +33,13 @@ Full rebuild: simpler, smarter, and now on Mac.
 - Official HD artwork from the catalog; YouTube thumbnails cropped square.
 - Copied-link detection, drop links on the window or Dock icon,
   `skipman://add?url=` links.
-- **Auto-update on launch** from GitHub (replaces update.ps1).
+- **Self-updating**: checks GitHub Releases on launch, downloads in the
+  background, RESTART to switch (replaces update.ps1).
 - Tests for the identification rules.
 
 ### Removed
-- update.ps1 / SongDL mirror workflow, SkipMan.vbs, SkipMan.pyw, Tkinter
-  screens, runtime pip installs, Windows-only FFmpeg zip download.
+- update.ps1 / SongDL mirror workflow, SkipMan.bat/.vbs/.pyw launchers,
+  Tkinter screens, runtime pip installs, runtime FFmpeg download.
 
 ## v2.0.0 — 2026-08-31
 

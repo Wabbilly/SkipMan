@@ -22,9 +22,16 @@ def ensure_ffmpeg(status=None):
     Order: already installed (PATH / Homebrew) -> the old v2 ffmpeg/ folder
     -> static-ffmpeg package (downloads a build once, ~80MB).
     """
+    from skipman.paths import BUNDLE_DIR, FROZEN
     with _lock:
         if _found[0] is not None:
             return _found[0] or None
+        bundled = os.path.join(BUNDLE_DIR, "ffmpeg")   # inside the app
+        if _has_both(bundled):
+            _found[0] = bundled
+            return bundled
+        if FROZEN:
+            raise RuntimeError("FFmpeg is missing from this SkipMan build.")
         ff, fp = shutil.which("ffmpeg"), shutil.which("ffprobe")
         if ff and fp:
             _found[0] = ""

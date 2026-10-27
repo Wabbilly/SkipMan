@@ -1,0 +1,130 @@
+# Builds the downloadable SkipMan apps and publishes them as a GitHub Release.
+# Trigger: push a tag like v3.0.1 (or run manually from the Actions tab).
+# Every build runs SkipMan's self-test (real download + FFmpeg + tagging)
+# before anything is published.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  TEST_URL: https://soundcloud.com/bvrnout/drake-hotling-bling-bvrnoutremix
+
+jobs:
+  build:
+    name: ${{ matrix.asset }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.optional }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: mac-arm64
+            asset: SkipMan-mac-apple-silicon
+            optional: false
+          - os: macos-15-intel
+            target: mac-x64
+            asset: SkipMan-mac-intel
+            optional: true
+          - os: windows-latest
+            target: windows
+            asset: SkipMan-windows
+            optional: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python packages
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller pytest
+
+      - name: Unit tests
+        shell: bash
+        run: python -m pytest -q tests
+
+      - name: Get FFmpeg
+        shell: bash
+        run: bash packaging/get_ffmpeg.sh ${{ matrix.target }}
+
+      - name: Build app
+        shell: bash
+        run: |
+          python packaging/make_icons.py
+          pyinstaller --noconfirm --clean --distpath dist --workpath build/pyi packaging/SkipMan.spec
+
+      - name: Self-test (Mac)
+        if: runner.os == 'macOS'
+        run: |
+          codesign --force --deep -s - dist/SkipMan.app
+          export SKIPMAN_SELFTEST_LOG="$PWD/selftest.log"
+          dist/SkipMan.app/Contents/MacOS/SkipMan --selftest "$TEST_URL" || (cat selftest.log; exit 1)
+          cat selftest.log
+          # Open the real window and make sure the interface loads
+          SKIPMAN_SMOKE_LOG="$PWD/smoke.log" SKIPMAN_NO_UPDATE=1 dist/SkipMan.app/Contents/MacOS/SkipMan &
+          pid=$!
+          for i in $(seq 120); do kill -0 $pid 2>/dev/null || break; sleep 1; done
+          kill $pid 2>/dev/null || true
+          cat smoke.log && grep -q "UI OK" smoke.log
+
+      - name: Self-test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:SKIPMAN_SELFTEST_LOG = "$PWD\selftest.log"
+          $p = Start-Process dist\SkipMan\SkipMan.exe -ArgumentList "--selftest", $env:TEST_URL -Wait -PassThru
+          Get-Content selftest.log
+          if ($p.ExitCode -ne 0) { exit 1 }
+          $env:SKIPMAN_SMOKE_LOG = "$PWD\smoke.log"
+          $env:SKIPMAN_NO_UPDATE = "1"
+          $w = Start-Process dist\SkipMan\SkipMan.exe -PassThru
+          if (-not $w.WaitForExit(120000)) { $w.Kill() }
+          Get-Content smoke.log
+          if (-not (Select-String -Path smoke.log -Pattern "UI OK" -Quiet)) { exit 1 }
+
+      - name: Zip (Mac)
+        if: runner.os == 'macOS'
+        run: ditto -c -k --sequesterRsrc --keepParent dist/SkipMan.app ${{ matrix.asset }}.zip
+
+      - name: Zip (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist\SkipMan -DestinationPath ${{ matrix.asset }}.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}.zip
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Release notes from CHANGELOG
+        run: |
+          awk -v tag="## ${GITHUB_REF_NAME}" 'index($0, tag)==1 {on=1; next} /^## v/ && on {exit} on' CHANGELOG.md > notes.md
+          cat packaging/release-footer.md >> notes.md
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -la assets
+          gh release create "$GITHUB_REF_NAME" assets/*.zip \
+            --title "SkipMan ${GITHUB_REF_NAME}" --notes-file notes.md
