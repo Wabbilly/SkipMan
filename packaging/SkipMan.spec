@@ -18,7 +18,9 @@ binaries = []
 ff = os.path.join(ROOT, "build", "ffmpeg")
 if os.path.isdir(ff):
     for name in os.listdir(ff):
-        binaries.append((os.path.join(ff, name), "ffmpeg"))
+        # Windows: ship as plain files so PyInstaller doesn't copy FFmpeg's
+        # DLLs a second time. Mac: as binaries so they get signed.
+        (datas if IS_WIN else binaries).append((os.path.join(ff, name), "ffmpeg"))
 
 a = Analysis(
     [os.path.join(ROOT, "main.py")],
