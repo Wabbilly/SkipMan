@@ -2,7 +2,7 @@
 
 # SkipMan
 
-Download songs from YouTube, SoundCloud and more, get the tags right, and send
+Download songs from YouTube, SoundCloud, TikTok, Reddit, X, Instagram and more, get the tags right, and send
 them straight to Apple Music, all in one small retro window. For Mac and
 Windows.
 

@@ -3,6 +3,24 @@
 All notable changes to SkipMan live here. Add a `## vX.Y.Z` section at the
 top for each release; it becomes the release notes on GitHub.
 
+## v3.1.0 — 2026-11-02
+
+### Added
+- **Reddit, X (Twitter), TikTok and Instagram links.** Paste a post and
+  SkipMan keeps just the audio (320 kbps MP3), then tags and sends it like
+  any other song. Works with reddit.com, v.redd.it, x.com, twitter.com,
+  tiktok.com (incl. short vm. links) and instagram.com posts and reels.
+- Posts with several clips (X, Instagram carousels) show up as an album;
+  posts with one clip are a single song.
+- Readable starting titles for social posts: the poster's name is dropped
+  from X titles, and Instagram/TikTok use the caption instead of
+  "Video by…" / "TikTok video #…".
+- **Automatic sign-in fallback.** If Reddit, Instagram or X refuse an
+  anonymous download, SkipMan borrows your sign-in from a browser on the
+  computer (Chrome, Safari, Firefox, Edge, Brave…) and remembers which one
+  worked. On a Mac the first time this happens you may see a one-time
+  "SkipMan wants to use Chrome Safe Storage" prompt; click Always Allow.
+
 ## v3.0.0 — 2026-10-27
 
 Full rebuild: simpler, smarter, and now on Mac.

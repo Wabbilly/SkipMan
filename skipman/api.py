@@ -18,7 +18,8 @@ URL_RE = re.compile(r"https?://[^\s<>\"']+", re.I)
 SUPPORTED = re.compile(
     r"(youtube\.com|youtu\.be|music\.youtube\.com|soundcloud\.com|"
     r"on\.soundcloud\.com|bandcamp\.com|vimeo\.com|mixcloud\.com|"
-    r"audiomack\.com|tiktok\.com)", re.I)
+    r"audiomack\.com|tiktok\.com|reddit\.com|redd\.it|twitter\.com|"
+    r"instagram\.com|(?:^|[/.@])x\.com)", re.I)
 
 
 def find_links(text):
@@ -132,8 +133,9 @@ class Api:
         for url in links:
             self._add_url(url)
         if not links:
-            self._set_status("That doesn't look like a YouTube or SoundCloud "
-                             "link.", "red")
+            self._set_status("That doesn't look like a link SkipMan can use "
+                             "(YouTube, SoundCloud, TikTok, Reddit, X, "
+                             "Instagram…).", "red")
         return len(links)
 
     def _add_url(self, url):
@@ -681,6 +683,10 @@ def _short_err(e):
     s = re.sub(r"\x1b\[[0-9;]*m", "", s)
     if "Sign in to confirm" in s:
         return "YouTube asked for a sign-in check. Try again in a bit."
+    if "wants you signed in" in s:
+        return s.strip().splitlines()[0]
+    if "No video could be found" in s or "no video" in s.lower():
+        return "That post has no video or audio to grab."
     if "not available" in s.lower():
         return "That video isn't available."
     return s.strip().splitlines()[0][:200] if s.strip() else "Unknown error"
