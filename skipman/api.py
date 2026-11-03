@@ -119,7 +119,7 @@ class Api:
               "confidence": "", "source": "", "art": "", "progress": 0,
               "speed": "", "error": "", "dupe": "", "file": "", "group": None,
               "track_no": None, "info": {}, "proposed": {}, "art_custom": None,
-              "message": ""}
+              "message": "", "login": None}
         it.update(kw)
         self._items[it["id"]] = it
         return it
@@ -151,7 +151,8 @@ class Api:
         try:
             info = probe(it["url"])
         except Exception as e:
-            it.update(status="error", error=_short_err(e), title=it["url"])
+            it.update(status="error", error=_short_err(e), title=it["url"],
+                      login=_login_site(it["url"], e))
             self._set_status("Couldn't read that link.", "red")
             return
 
@@ -326,7 +327,8 @@ class Api:
             it["progress"] = round(d.get("pct", 0))
             it["speed"] = d.get("speed", "")
         elif event == "error":
-            it.update(status="error", error=_short_err(d.get("message", "")))
+            it.update(status="error", error=_short_err(d.get("message", "")),
+                      login=_login_site(it["url"], d.get("message", "")))
             self._set_status(f"Download failed: {it['title']}", "red")
         elif event == "done":
             res = d["result"]
@@ -619,8 +621,67 @@ class Api:
             except Exception:
                 pass
 
+    # ── Site logins ─────────────────────────────────────────────────────────
+    def login(self, site):
+        """Open the site's login page in a small window. Once the site's
+        login cookie shows up, save it, close the window, and retry any
+        links from that site that failed for lack of a login."""
+        import webview
+        from skipman import logins
+        info = logins.SITES.get(site)
+        if not info:
+            return False
+        win = webview.create_window(
+            f"Log in to {info['name']} — SkipMan", info["url"],
+            width=480, height=720)
+        closed = threading.Event()
+        try:
+            win.events.closed += lambda *a: closed.set()
+        except Exception:
+            pass
+        self._set_status(f"Log in to {info['name']} in the new window…",
+                         "amber")
+
+        def _watch():
+            deadline = time.time() + 15 * 60
+            while not closed.is_set() and time.time() < deadline:
+                time.sleep(1.5)
+                try:
+                    lines = logins.cookie_lines(win.get_cookies(), site)
+                except Exception:
+                    continue
+                if logins.has_session(lines, site):
+                    time.sleep(1.5)        # let the site finish setting up
+                    try:
+                        lines = logins.cookie_lines(win.get_cookies(), site) \
+                            or lines
+                    except Exception:
+                        pass
+                    logins.save(site, lines)
+                    try:
+                        win.destroy()
+                    except Exception:
+                        pass
+                    self._set_status(f"Logged in to {info['name']} ✓",
+                                     "green")
+                    for it in list(self._items.values()):
+                        if it["status"] == "error" and it.get("login") == site:
+                            self.retry(it["id"])
+                    return
+            if not logins.is_logged_in(site):
+                self._set_status(f"Not logged in to {info['name']}.", "amber")
+        threading.Thread(target=_watch, daemon=True).start()
+        return True
+
+    def logout(self, site):
+        from skipman import logins
+        logins.logout(site)
+        return self.get_settings()
+
     def get_settings(self):
+        from skipman import logins
         return {"save_dir": self._save_dir,
+                "logins": logins.status(),
                 "acoustid_key": self._store.get_setting("acoustid_key", ""),
                 "fingerprint_ready": fingerprint_available(
                     self._store.get_setting("acoustid_key", "")),
@@ -678,12 +739,20 @@ class Api:
         return True
 
 
+def _login_site(url, err):
+    """Which site's LOG IN button to show for this error (None = no button)."""
+    if "LOG IN" not in str(err):
+        return None
+    from skipman.logins import site_for_url
+    return site_for_url(url)
+
+
 def _short_err(e):
     s = str(e).replace("ERROR: ", "")
     s = re.sub(r"\x1b\[[0-9;]*m", "", s)
     if "Sign in to confirm" in s:
         return "YouTube asked for a sign-in check. Try again in a bit."
-    if "wants you signed in" in s:
+    if "LOG IN" in s:
         return s.strip().splitlines()[0]
     if "No video could be found" in s or "no video" in s.lower():
         return "That post has no video or audio to grab."

@@ -45,3 +45,31 @@ def test_reddit_title_kept_and_youtube_untouched():
     yt = "Drake - Hotline Bling (Official Video)"
     assert id_info({"title": yt, "extractor_key": "Youtube",
                     "uploader": "Drake"})["title"] == yt
+
+
+def test_login_cookies_saved_and_detected(tmp_path, monkeypatch):
+    from http.cookies import SimpleCookie
+    from skipman import logins
+    monkeypatch.setattr(logins, "cookie_file", lambda: str(tmp_path / "l.txt"))
+
+    def ck(name, value, domain, expires="Wed, 01 Dec 2027 00:00:00 GMT"):
+        c = SimpleCookie()
+        c[name] = value
+        c[name]["domain"], c[name]["path"] = domain, "/"
+        c[name]["expires"], c[name]["secure"] = expires, True
+        return c
+
+    assert not logins.is_logged_in("reddit")
+    got = [ck("reddit_session", "abc", ".reddit.com"), ck("loid", "x", "www.reddit.com", ""),
+           ck("other", "y", ".google.com")]
+    lines = logins.cookie_lines(got, "reddit")
+    assert len(lines) == 2 and logins.has_session(lines, "reddit")
+    logins.save("reddit", lines)
+    logins.save("x", logins.cookie_lines([ck("auth_token", "t", ".x.com")], "x"))
+    assert logins.is_logged_in("reddit") and logins.is_logged_in("x")
+    assert not logins.is_logged_in("instagram")
+    logins.logout("reddit")
+    assert not logins.is_logged_in("reddit") and logins.is_logged_in("x")
+    assert logins.site_for_url("https://old.reddit.com/r/a") == "reddit"
+    assert logins.site_for_url("https://x.com/a/status/1") == "x"
+    assert logins.site_for_url("https://netflix.com/") is None

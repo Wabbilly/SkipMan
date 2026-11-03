@@ -1,2 +1,2 @@
 """SkipMan — Download, tag, and send to Apple Music."""
-__version__ = "3.1.0"
+__version__ = "3.1.1"

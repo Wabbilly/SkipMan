@@ -154,27 +154,50 @@ def _first_entry(info):
 
 
 def _extract_with_login(url, opts, download):
-    """Try normally; for social sites that demand a sign-in, retry with the
-    browser's sign-in."""
-    try:
-        return _extract(url, opts, download)
-    except Exception as first:
-        if not (is_social(url) and AUTH_ERR.search(str(first))):
-            raise
-        for browser in _browsers():
+    """Social sites: use the login saved with SkipMan's LOG IN button when
+    there is one; otherwise try normally, then a browser's sign-in."""
+    from skipman import logins
+    site = logins.site_for_url(url) if is_social(url) else None
+    saved = bool(site and logins.is_logged_in(site))
+    first = None
+    if saved:
+        path = logins.temp_copy()
+        try:
             o = dict(opts)
-            o["cookiesfrombrowser"] = (browser,)
-            o["logger"] = _Quiet()
+            o["cookiefile"] = path
+            return _extract(url, o, download)
+        except Exception as e:
+            if not AUTH_ERR.search(str(e)):
+                raise
+            first = e
+        finally:
             try:
-                res = _extract(url, o, download)
+                os.remove(path)
             except Exception:
-                continue
-            _save_browser(browser)
-            return res
-        site = site_name(url)
-        raise ValueError(
-            f"{site} wants you signed in. Log in to {site} in Chrome, Safari "
-            "or Firefox on this computer, then try again.") from first
+                pass
+    else:
+        try:
+            return _extract(url, opts, download)
+        except Exception as e:
+            if not (site and AUTH_ERR.search(str(e))):
+                raise
+            first = e
+    for browser in _browsers():
+        o = dict(opts)
+        o["cookiesfrombrowser"] = (browser,)
+        o["logger"] = _Quiet()
+        try:
+            res = _extract(url, o, download)
+        except Exception:
+            continue
+        _save_browser(browser)
+        return res
+    name = logins.SITES[site]["name"] if site else site_name(url)
+    if saved:
+        raise ValueError(f"Your {name} login didn't work for this post. "
+                         f"Click LOG IN to sign in to {name} again.") from first
+    raise ValueError(f"{name} wants you signed in. Click LOG IN to sign in "
+                     f"to {name} inside SkipMan (one time).") from first
 
 
 ID_FIELDS = ("title", "uploader", "channel", "artist", "artists", "track",

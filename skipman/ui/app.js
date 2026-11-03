@@ -48,7 +48,7 @@ function statusHtml(r) {
     case "sent": return `<span class="stat ready">✓ SENT</span>`;
     case "dupe": return `<span class="stat amb">DUPE <button class="btn small inline-btn" data-act="skip" data-id="${r.id}">SKIP</button><button class="btn small inline-btn" data-act="anyway" data-id="${r.id}">GET IT ANYWAY</button></span>`;
     case "error": case "error-send":
-      return `<span class="stat err" title="${esc(r.error)}">ERROR <button class="btn small inline-btn" data-act="retry" data-id="${r.id}">RETRY</button></span>`;
+      return `<span class="stat err" title="${esc(r.error)}">ERROR ${r.login ? `<button class="btn accent small inline-btn" data-act="login" data-site="${esc(r.login)}" data-id="${r.id}">LOG IN</button>` : ""}<button class="btn small inline-btn" data-act="retry" data-id="${r.id}">RETRY</button></span>`;
     default: return `<span class="stat">${esc(r.status)}</span>`;
   }
 }
@@ -249,6 +249,7 @@ $("list").addEventListener("click", (e) => {
       skip: () => api().remove(id),
       anyway: () => api().get_anyway(id),
       retry: () => api().retry(id),
+      login: () => api().login(act.dataset.site),
       "as-album": () => api().album_set_kind(id, "album"),
       "as-songs": () => api().album_set_kind(id, "songs"),
       "drop-dupes": () => api().album_drop_dupes(id),
@@ -400,12 +401,21 @@ async function openSettings() {
   $("sKeyNote").textContent = s.acoustid_key
     ? (s.fingerprint_ready ? "Sound matching is ON." : "Key saved. Also needs the fpcalc tool (brew install chromaprint).")
     : "Free key from acoustid.org — lets SkipMan identify badly titled uploads by sound.";
+  $("sLogins").innerHTML = Object.entries(s.logins || {}).map(([k, v]) =>
+    `<div class="row between"><span>${esc(v.name)} <span class="muted">${v.logged_in ? "✓ logged in" : "not logged in"}</span></span>
+     <button class="btn small" data-login="${k}" data-out="${v.logged_in ? 1 : ""}">${v.logged_in ? "LOG OUT" : "LOG IN"}</button></div>`).join("");
   $("sVer").textContent = "SkipMan v" + s.version + " · updates itself from GitHub on launch";
   $("settings").classList.remove("hidden");
 }
 $("settingsBtn").onclick = openSettings;
 $("setClose").onclick = () => $("settings").classList.add("hidden");
 $("sDirBtn").onclick = async () => { $("sDir").value = await api().choose_save_dir(); };
+$("sLogins").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-login]");
+  if (!b) return;
+  if (b.dataset.out) { await api().logout(b.dataset.login); openSettings(); }
+  else { $("settings").classList.add("hidden"); api().login(b.dataset.login); }
+});
 $("sKeyBtn").onclick = async () => { await api().set_acoustid_key($("sKey").value); openSettings(); };
 
 // ── Boot ────────────────────────────────────────────────────────────────────

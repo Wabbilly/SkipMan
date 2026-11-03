@@ -3,6 +3,18 @@
 All notable changes to SkipMan live here. Add a `## vX.Y.Z` section at the
 top for each release; it becomes the release notes on GitHub.
 
+## v3.1.1 — 2026-11-02
+
+### Added
+- **LOG IN button for Reddit, Instagram and X.** When a site wants you
+  signed in, the error now has a LOG IN button. It opens that site's own
+  login page in a small window; once you're in, the window closes by itself,
+  SkipMan keeps the login, and the failed links retry automatically.
+  Also in ⚙ Settings → Site logins (with LOG OUT).
+- Saved logins live in SkipMan's own data folder, so they need no Full Disk
+  Access or browser access and they survive updates. The browser sign-in
+  fallback from v3.1.0 is still tried when there's no saved login.
+
 ## v3.1.0 — 2026-11-02
 
 ### Added
