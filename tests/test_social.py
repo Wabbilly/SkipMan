@@ -59,17 +59,17 @@ def test_login_cookies_saved_and_detected(tmp_path, monkeypatch):
         c[name]["expires"], c[name]["secure"] = expires, True
         return c
 
-    assert not logins.is_logged_in("reddit")
-    got = [ck("reddit_session", "abc", ".reddit.com"), ck("loid", "x", "www.reddit.com", ""),
-           ck("other", "y", ".google.com")]
-    lines = logins.cookie_lines(got, "reddit")
-    assert len(lines) == 2 and logins.has_session(lines, "reddit")
-    logins.save("reddit", lines)
-    logins.save("x", logins.cookie_lines([ck("auth_token", "t", ".x.com")], "x"))
-    assert logins.is_logged_in("reddit") and logins.is_logged_in("x")
     assert not logins.is_logged_in("instagram")
-    logins.logout("reddit")
-    assert not logins.is_logged_in("reddit") and logins.is_logged_in("x")
+    got = [ck("sessionid", "abc", ".instagram.com"), ck("csrftoken", "x", "www.instagram.com", ""),
+           ck("other", "y", ".google.com")]
+    lines = logins.cookie_lines(got, "instagram")
+    assert len(lines) == 2 and logins.has_session(lines, "instagram")
+    logins.save("instagram", lines)
+    logins.save("x", logins.cookie_lines([ck("auth_token", "t", ".x.com")], "x"))
+    assert logins.is_logged_in("instagram") and logins.is_logged_in("x")
+    logins.logout("instagram")
+    assert not logins.is_logged_in("instagram") and logins.is_logged_in("x")
+    assert "reddit" not in logins.SITES
     assert logins.site_for_url("https://old.reddit.com/r/a") == "reddit"
     assert logins.site_for_url("https://x.com/a/status/1") == "x"
     assert logins.site_for_url("https://netflix.com/") is None

@@ -3,6 +3,16 @@
 All notable changes to SkipMan live here. Add a `## vX.Y.Z` section at the
 top for each release; it becomes the release notes on GitHub.
 
+## v3.1.2 — 2026-11-02
+
+### Changed
+- **Reddit links now give a plain answer.** Reddit blocks downloads from
+  apps like SkipMan even when you're logged in, so instead of a confusing
+  technical error SkipMan says so and suggests finding the clip on YouTube,
+  X or TikTok. The message shows in the status bar too.
+- Removed the Reddit login (it can't get past Reddit's block). LOG IN stays
+  for Instagram and X. Reddit dropped from the supported-sites line.
+
 ## v3.1.1 — 2026-11-02
 
 ### Added

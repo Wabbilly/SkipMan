@@ -1,5 +1,6 @@
 # ── Site logins (Reddit, Instagram, X) ──────────────────────────────────────
-# Some sites only hand over videos to signed-in people. SkipMan opens the
+# Some sites only hand over videos to signed-in people (Reddit isn't here:
+# it blocks apps even with a login, see downloader.REDDIT_MSG). SkipMan opens the
 # site's own login page in a small window; once you're signed in it keeps
 # that login (cookies) in its own data folder and uses it for downloads.
 # No browser access or Full Disk Access needed, and it survives updates.
@@ -13,8 +14,6 @@ import time
 from skipman.paths import data_dir
 
 SITES = {
-    "reddit": {"name": "Reddit", "url": "https://www.reddit.com/login/",
-               "domains": ("reddit.com", "redd.it"), "session": "reddit_session"},
     "instagram": {"name": "Instagram",
                   "url": "https://www.instagram.com/accounts/login/",
                   "domains": ("instagram.com",), "session": "sessionid"},

@@ -13,8 +13,8 @@ def detect_apple_music(url):
 
 
 APPLE_MSG = ("Apple Music links are DRM-protected and cannot be downloaded.\n"
-             "Paste a YouTube, SoundCloud, TikTok, Reddit, X or Instagram "
-             "link instead.")
+             "Paste a YouTube, SoundCloud, TikTok, X or Instagram link "
+             "instead.")
 
 # Social sites: SkipMan keeps only the audio from their videos
 SOCIAL_PATTERN = re.compile(
@@ -153,11 +153,26 @@ def _first_entry(info):
     return info
 
 
+REDDIT_MSG = ("Reddit blocks downloads from apps like SkipMan, even when "
+              "you're logged in. Find this clip on YouTube, X or TikTok and "
+              "paste that link instead.")
+
+
 def _extract_with_login(url, opts, download):
     """Social sites: use the login saved with SkipMan's LOG IN button when
     there is one; otherwise try normally, then a browser's sign-in."""
     from skipman import logins
     site = logins.site_for_url(url) if is_social(url) else None
+    if site == "reddit":
+        # Reddit refuses apps outright (logins don't help), so give one
+        # plain answer instead of a confusing technical error.
+        try:
+            return _extract(url, opts, download)
+        except Exception as e:
+            if re.search(r"no video|not available|removed|deleted",
+                         str(e), re.I):
+                raise
+            raise ValueError(REDDIT_MSG) from e
     saved = bool(site and logins.is_logged_in(site))
     first = None
     if saved:

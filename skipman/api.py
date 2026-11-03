@@ -134,8 +134,8 @@ class Api:
             self._add_url(url)
         if not links:
             self._set_status("That doesn't look like a link SkipMan can use "
-                             "(YouTube, SoundCloud, TikTok, Reddit, X, "
-                             "Instagram…).", "red")
+                             "(YouTube, SoundCloud, TikTok, X, Instagram…).",
+                             "red")
         return len(links)
 
     def _add_url(self, url):
@@ -153,7 +153,8 @@ class Api:
         except Exception as e:
             it.update(status="error", error=_short_err(e), title=it["url"],
                       login=_login_site(it["url"], e))
-            self._set_status("Couldn't read that link.", "red")
+            self._set_status(it["error"] if it["error"].startswith("Reddit ")
+                             else "Couldn't read that link.", "red")
             return
 
         if info["kind"] == "playlist":
